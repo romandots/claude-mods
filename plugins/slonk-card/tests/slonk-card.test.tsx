@@ -140,4 +140,25 @@ describe('slonk-card', () => {
 
     expect(await bandText($, 'terminal')).toContain('Testing')
   })
+
+  test('stops polling once the host refuses its own MCP calls', async ($, on) => {
+    const clock = world(on)
+    let calls = 0
+    on('tool.call', { tool: 'mcp__slonk-developer__get_issue' }, () => ({
+      result: {},
+      text: issue('Testing', 'started'),
+    }))
+    on('mcp.call', () => {
+      calls += 1
+      return { deny: 'auto mode classifier gave no verdict' }
+    })
+
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await $.tool.call({ tool: 'mcp__slonk-developer__get_issue', issue_id: 'SLONK-37' })
+    await clock.advance(60_000)
+    await clock.advance(60_000)
+
+    expect(calls).toBe(1)
+    expect(await bandText($, 'terminal')).toContain('Testing')
+  })
 })

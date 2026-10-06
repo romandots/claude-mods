@@ -67,6 +67,9 @@ export const issuesIn = (text: string | undefined): Issue[] => {
 const describe = (c: Card) => `${c.key} · ${c.column}${c.title ? ` — ${c.title}` : ''}`
 
 let poll: { cancel: () => void } | null = null
+// False once the host refused a call the mod made on its own (e.g. under the auto
+// permission mode, whose classifier only judges actions the model asked for).
+let canPoll = true
 
 const store = async ($: EngineInterface, issue: Issue, server: string) => {
   const now = await $.clock.now()
@@ -87,7 +90,11 @@ const refresh = async ($: EngineInterface, key?: string): Promise<string> => {
   if (!server) return 'Не знаю, через какой slonk-сервер читать: сначала вызовите любой инструмент slonk.'
 
   try {
-    const res = await $.mcp.call(server, 'get_issue', { issue_id: target })
+    const res = await $.mcp.call(server, 'get_issue', { issue_id: target }).catch((err: unknown) => {
+      // The host refused the call itself (not the server answering an error).
+      canPoll = false
+      throw err
+    })
     const text = res.content.map(block => block.text ?? '').join('')
     const issue = issuesIn(text)[0]
     if (res.isError || !issue) throw new Error(text.slice(0, 200) || 'пустой ответ')
@@ -110,7 +117,7 @@ export const register: Register = on => {
     })
     poll?.cancel()
     poll = $.clock.every(POLL_MS, () => {
-      void read($, card).then(c => (c ? refresh($) : undefined))
+      if (canPoll) void read($, card).then(c => (c ? refresh($) : undefined))
     })
 
     return next(e)
