@@ -1,0 +1,11 @@
+{
+  "name": "romandots-mods",
+  "owner": { "name": "Roman Dots" },
+  "plugins": [
+    {
+      "name": "slonk-card",
+      "source": "./plugins/slonk-card",
+      "description": "Текущая карточка slonk и её колонка над полем ввода"
+    }
+  ]
+}
