@@ -195,7 +195,6 @@ export const register: Register = on => {
             {c.title}
           </Text>
         )}
-        {c.error !== undefined && <Text color="red"> (ошибка обновления)</Text>}
         {minutes !== null && minutes > 0 && <Text dimColor> · {minutes} мин назад</Text>}
         <Text> </Text>
         <Button key="refresh" label="Обновить" onPress={() => void refresh($)} />
