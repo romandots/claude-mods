@@ -22,15 +22,22 @@ const BAND = {
   },
 } as const
 
-/** The stepper's steps as drawn: their fill, or `outline` for a bordered one. */
+const SVG_STATE: Record<string, string> = { '#46A758': 'success', '#EF4444': 'error', '#F59E0B': 'warning', none: 'outline' }
+
+/** The stepper's steps as drawn: their fill, or `outline` for an outlined one. */
 const stepper = async ($: Engine, surface: 'terminal' | 'desktop') => {
   const ui = await $.ui.mount({ ...BAND, surface })
-  const found =
-    surface === 'desktop'
-      ? (await ui.findAll({ type: 'Box' })).filter(b => b.props.flexGrow === 1)
-      : (await ui.findAll({ type: 'Text' })).filter(t => t.props.backgroundColor !== undefined || t.props.color === 'inactive')
+  if (surface === 'desktop') {
+    const svg = await ui.find({ type: 'Svg' })
+    await ui.unmount()
+    const source = String(svg?.props.source ?? '')
+    return [...source.matchAll(/<rect [^>]*fill="([^"]+)"/g)].map(m => SVG_STATE[m[1]!] ?? m[1]!)
+  }
+  const found = (await ui.findAll({ type: 'Text' })).filter(
+    t => t.props.backgroundColor !== undefined || t.props.color === 'inactive',
+  )
   await ui.unmount()
-  return found.map(b => String(b.props.backgroundColor ?? (b.props.borderStyle || b.props.color ? 'outline' : 'none')))
+  return found.map(b => String(b.props.backgroundColor ?? 'outline'))
 }
 
 const bandText = async ($: Engine, surface: 'terminal' | 'desktop') => {
@@ -183,9 +190,10 @@ describe('slonk-card', () => {
 
     for (const surface of ['terminal', 'desktop'] as const) {
       const cells = await stepper($, surface)
-      expect(cells.slice(0, 4)).toEqual(['success', 'success', 'success', 'success'])
-      expect(['warning', 'claude']).toContain(cells[4])
-      expect(cells.slice(5)).toEqual(['outline', 'outline', 'outline', 'outline'])
+      expect(cells).toHaveLength(10)
+      expect(cells.slice(0, 5)).toEqual(['success', 'success', 'success', 'success', 'success'])
+      expect(['warning', 'claude']).toContain(cells[5])
+      expect(cells.slice(6)).toEqual(['outline', 'outline', 'outline', 'outline'])
     }
   })
 
@@ -198,9 +206,9 @@ describe('slonk-card', () => {
     await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
     await $.tool.call({ tool: 'mcp__slonk-developer__transition_issue', issue_id: 'SLONK-37', state: 'Testing' })
 
-    const before = (await stepper($, 'terminal'))[5]
+    const before = (await stepper($, 'terminal'))[6]
     await clock.advance(700)
-    const after = (await stepper($, 'terminal'))[5]
+    const after = (await stepper($, 'terminal'))[6]
 
     expect(before).not.toBe(after)
   })
@@ -219,8 +227,8 @@ describe('slonk-card', () => {
     await $.tool.call({ tool: 'mcp__slonk-developer__transition_issue', issue_id: 'SLONK-37', state: column })
 
     const cells = await stepper($, 'terminal')
-    expect(cells.slice(0, 2)).toEqual(['success', 'success'])
-    expect(cells[2]).toBe('error')
+    expect(cells.slice(0, 3)).toEqual(['success', 'success', 'success'])
+    expect(cells[3]).toBe('error')
   })
 
   test('a done card fills every step', async ($, on) => {

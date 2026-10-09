@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, Register, RenderElement } from 'claude-code'
 
 import type { Card } from '../types'
 
@@ -12,6 +12,7 @@ const POLL_MS = 60_000
 const PULSE_MS = 700
 // slonk's main flow, left to right: one stepper cell per column.
 export const FLOW = [
+  'Backlog',
   'To Do',
   'Analysis',
   'Development',
@@ -133,10 +134,48 @@ type StepState = 'done' | 'current' | 'blocked' | 'todo'
 
 /** How a step is painted: filled when passed or current, outlined when ahead. */
 export const stepLook = (step: StepState, isLit: boolean) => {
-  if (step === 'done') return { backgroundColor: 'success' }
-  if (step === 'blocked') return { backgroundColor: 'error' }
-  if (step === 'current') return { backgroundColor: isLit ? 'claude' : 'warning' }
-  return { borderStyle: 'round', borderColor: 'inactive' }
+  // Every step carries the same square border so all of them have one shape;
+  // a filled step's border is the colour of its fill.
+  const fill = (color: string) => ({ backgroundColor: color, borderStyle: 'single', borderColor: color })
+  if (step === 'done') return fill('success')
+  if (step === 'blocked') return fill('error')
+  if (step === 'current') return fill(isLit ? 'claude' : 'warning')
+  return { backgroundColor: undefined, borderStyle: 'single', borderColor: 'inactive' }
+}
+
+const STEP_PX = 7
+// Plane's own state colours, so the stepper reads like the board.
+const SVG_COLOR = { done: '#46A758', blocked: '#EF4444', current: '#F59E0B', currentLit: '#D97706', todo: '#9AA4BC' }
+
+/**
+ * The desktop stepper: one rectangle per FLOW column across the band's width,
+ * passed and current ones filled, the ones ahead outlined; the current one
+ * flickers through an SVG animation, so no redraw is needed for it.
+ */
+export const stepperSvg = (states: StepState[]) => {
+  const span = 1000
+  const gap = 8
+  const w = (span - gap * (states.length - 1)) / states.length
+  const rects = states.map((step, i) => {
+    const x = (i * (w + gap)).toFixed(2)
+    const size = `x="${x}" y="0.5" width="${w.toFixed(2)}" height="${STEP_PX - 1}"`
+    if (step === 'todo') {
+      return `<rect ${size} fill="none" stroke="${SVG_COLOR.todo}" stroke-width="1" vector-effect="non-scaling-stroke"/>`
+    }
+    if (step === 'current') {
+      return (
+        `<rect ${size} fill="${SVG_COLOR.current}">` +
+        `<animate attributeName="fill" values="${SVG_COLOR.current};${SVG_COLOR.currentLit};${SVG_COLOR.current}" dur="1.4s" repeatCount="indefinite"/>` +
+        `</rect>`
+      )
+    }
+    return `<rect ${size} fill="${step === 'done' ? SVG_COLOR.done : SVG_COLOR.blocked}"/>`
+  })
+
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="${STEP_PX}" ` +
+    `viewBox="0 0 ${span} ${STEP_PX}" preserveAspectRatio="none">${rects.join('')}</svg>`
+  )
 }
 
 /** Terminal cell width so the nine steps and their gaps span the band. */
@@ -241,7 +280,25 @@ export const register: Register = on => {
     const { Box, Button, Text } = $.ui.resolve(e)
     const minutes = c.checkedAt ? Math.floor(((await $.clock.now()) - c.checkedAt) / 60_000) : null
 
-    const isLit = await read($, pulse)
+    // Only the terminal flickers by redraw; the desktop SVG animates itself.
+    const isLit = e.surface === 'desktop' ? false : await read($, pulse)
+
+    let desktopStepper: RenderElement | null = null
+    if (e.surface === 'desktop') {
+      const { Svg } = $.ui.resolve(e)
+      const states = steps(c)
+      const at = Math.min(states.filter(st => st === 'done').length + 1, FLOW.length)
+      desktopStepper = (
+        <Box width="100%" marginTop={1}>
+          <Svg
+            source={stepperSvg(states)}
+            alt={`${c.key}: ${c.column}, шаг ${at} из ${FLOW.length}`}
+            height={STEP_PX}
+            isInteractive
+          />
+        </Box>
+      )
+    }
 
     return (
       <Box flexDirection="column">
@@ -263,19 +320,7 @@ export const register: Register = on => {
           <Button key="refresh" label="Обновить" onPress={() => void refresh($)} />
           <Button key="hide" label="Скрыть" onPress={() => update($, isHidden, () => true)} />
         </Box>
-        {e.surface === 'desktop' ? (
-          <Box flexDirection="row" width="100%" columnGap={1} marginTop={1}>
-            {steps(c).map((step, i) => (
-              <Box
-                key={`step-${i}`}
-                flexGrow={1}
-                flexShrink={1}
-                height={1}
-                {...stepLook(step, isLit)}
-              />
-            ))}
-          </Box>
-        ) : (
+        {desktopStepper ?? (
           <Box flexDirection="row">
             {steps(c).map((step, i) => {
               const look = stepLook(step, isLit)
