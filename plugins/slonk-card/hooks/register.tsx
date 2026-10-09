@@ -22,7 +22,6 @@ export const FLOW = [
   'Merging',
   'Done',
 ] as const
-const CELL = '     '
 // Any MCP tool, mcp__<server>__<tool>: slonk may be connected as slonk-developer,
 // slonk-qa, ... or as a connector named by a UUID, so a server is told by its answers.
 const MCP_TOOL = /^mcp__(.+)__([a-z_]+)$/i
@@ -131,6 +130,17 @@ const refresh = async ($: EngineInterface, key?: string): Promise<string> => {
 const isMoving = (c: Card) => c.column !== 'Done' && FLOW.includes(c.column as (typeof FLOW)[number])
 
 type StepState = 'done' | 'current' | 'blocked' | 'todo'
+
+/** How a step is painted: filled when passed or current, outlined when ahead. */
+export const stepLook = (step: StepState, isLit: boolean) => {
+  if (step === 'done') return { backgroundColor: 'success' }
+  if (step === 'blocked') return { backgroundColor: 'error' }
+  if (step === 'current') return { backgroundColor: isLit ? 'claude' : 'warning' }
+  return { borderStyle: 'round', borderColor: 'inactive' }
+}
+
+/** Terminal cell width so the nine steps and their gaps span the band. */
+const cellWidth = (columns: number) => Math.max(3, Math.floor((columns - (FLOW.length - 1)) / FLOW.length))
 
 /** What each FLOW cell shows for a card. */
 export const steps = (c: Pick<Card, 'column' | 'group' | 'flowIndex'>): StepState[] => {
@@ -253,17 +263,32 @@ export const register: Register = on => {
           <Button key="refresh" label="Обновить" onPress={() => void refresh($)} />
           <Button key="hide" label="Скрыть" onPress={() => update($, isHidden, () => true)} />
         </Box>
-        <Box flexDirection="row">
-          {steps(c).map((step, i) => {
-            const key = `step-${i}`
-            if (step === 'done') return <Text key={key} backgroundColor="success">{CELL}</Text>
-            if (step === 'blocked') return <Text key={key} backgroundColor="error">{CELL}</Text>
-            if (step === 'current') {
-              return <Text key={key} backgroundColor={isLit ? 'claude' : 'warning'}>{CELL}</Text>
-            }
-            return <Text key={key} color="inactive">[   ]</Text>
-          }).flatMap((cell, i) => (i === 0 ? [cell] : [<Text key={`gap-${i}`}> </Text>, cell]))}
-        </Box>
+        {e.surface === 'desktop' ? (
+          <Box flexDirection="row" width="100%" columnGap={1} marginTop={1}>
+            {steps(c).map((step, i) => (
+              <Box
+                key={`step-${i}`}
+                flexGrow={1}
+                flexShrink={1}
+                height={1}
+                {...stepLook(step, isLit)}
+              />
+            ))}
+          </Box>
+        ) : (
+          <Box flexDirection="row">
+            {steps(c).map((step, i) => {
+              const look = stepLook(step, isLit)
+              const width = cellWidth(e.props.bodyColumns)
+              return (
+                <Text key={`step-${i}`} backgroundColor={look.backgroundColor} color={look.borderColor}>
+                  {i === 0 ? '' : ' '}
+                  {look.backgroundColor ? ' '.repeat(width) : `▕${' '.repeat(Math.max(0, width - 2))}▏`}
+                </Text>
+              )
+            })}
+          </Box>
+        )}
       </Box>
     )
   })

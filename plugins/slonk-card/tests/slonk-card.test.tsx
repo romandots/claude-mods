@@ -22,14 +22,15 @@ const BAND = {
   },
 } as const
 
-/** The stepper's cells as drawn: what fills each one, by its key. */
+/** The stepper's steps as drawn: their fill, or `outline` for a bordered one. */
 const stepper = async ($: Engine, surface: 'terminal' | 'desktop') => {
   const ui = await $.ui.mount({ ...BAND, surface })
-  const texts = await ui.findAll({ type: 'Text' })
+  const found =
+    surface === 'desktop'
+      ? (await ui.findAll({ type: 'Box' })).filter(b => b.props.flexGrow === 1)
+      : (await ui.findAll({ type: 'Text' })).filter(t => t.props.backgroundColor !== undefined || t.props.color === 'inactive')
   await ui.unmount()
-  return texts
-    .filter(t => t.text === '     ' || t.text === '[   ]')
-    .map(t => String(t.props.backgroundColor ?? t.props.color))
+  return found.map(b => String(b.props.backgroundColor ?? (b.props.borderStyle || b.props.color ? 'outline' : 'none')))
 }
 
 const bandText = async ($: Engine, surface: 'terminal' | 'desktop') => {
@@ -184,7 +185,7 @@ describe('slonk-card', () => {
       const cells = await stepper($, surface)
       expect(cells.slice(0, 4)).toEqual(['success', 'success', 'success', 'success'])
       expect(['warning', 'claude']).toContain(cells[4])
-      expect(cells.slice(5)).toEqual(['inactive', 'inactive', 'inactive', 'inactive'])
+      expect(cells.slice(5)).toEqual(['outline', 'outline', 'outline', 'outline'])
     }
   })
 
