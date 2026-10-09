@@ -173,7 +173,9 @@ export const stepperSvg = (states: StepState[]) => {
   })
 
   return (
-    `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="${STEP_PX}" ` +
+    // Wider than any band: the desktop draws an SVG at its own width capped by
+    // the slot, so this makes it span the band; the height is pinned by the prop.
+    `<svg xmlns="http://www.w3.org/2000/svg" width="10000" height="${STEP_PX}" ` +
     `viewBox="0 0 ${span} ${STEP_PX}" preserveAspectRatio="none">${rects.join('')}</svg>`
   )
 }
@@ -302,23 +304,29 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column">
-        <Box>
-          <Text dimColor>slonk </Text>
-          <Text bold>{c.key}</Text>
-          <Text> · </Text>
-          <Text bold color={GROUP_COLOR[c.group] ?? 'white'}>
-            {c.column}
-          </Text>
-          {c.title !== '' && (
-            <Text dimColor wrap="truncate-end">
-              {' '}
-              {c.title}
+        <Box flexDirection="row" width="100%">
+          <Box flexShrink={0}>
+            <Text dimColor wrap="truncate">slonk </Text>
+            <Text bold wrap="truncate">{c.key}</Text>
+            <Text wrap="truncate"> · </Text>
+            <Text bold wrap="truncate" color={GROUP_COLOR[c.group] ?? 'white'}>
+              {c.column}
             </Text>
-          )}
-          {minutes !== null && minutes > 0 && <Text dimColor> · {minutes} мин назад</Text>}
-          <Text> </Text>
-          <Button key="refresh" label="Обновить" onPress={() => void refresh($)} />
-          <Button key="hide" label="Скрыть" onPress={() => update($, isHidden, () => true)} />
+          </Box>
+          <Box flexGrow={1} flexShrink={1} minWidth={0}>
+            {c.title !== '' && (
+              <Text dimColor wrap="truncate-end">
+                {' '}
+                {c.title}
+              </Text>
+            )}
+          </Box>
+          <Box flexShrink={0}>
+            {minutes !== null && minutes > 0 && <Text dimColor wrap="truncate"> · {minutes} мин назад</Text>}
+            <Text> </Text>
+            <Button key="refresh" label="Обновить" onPress={() => void refresh($)} />
+            <Button key="hide" label="Скрыть" onPress={() => update($, isHidden, () => true)} />
+          </Box>
         </Box>
         {desktopStepper ?? (
           <Box flexDirection="row">
