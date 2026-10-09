@@ -231,47 +231,39 @@ export const register: Register = on => {
     const { Box, Button, Text } = $.ui.resolve(e)
     const minutes = c.checkedAt ? Math.floor(((await $.clock.now()) - c.checkedAt) / 60_000) : null
 
-    return (
-      <Box>
-        <Text dimColor>slonk </Text>
-        <Text bold>{c.key}</Text>
-        <Text> · </Text>
-        <Text bold color={GROUP_COLOR[c.group] ?? 'white'}>
-          {c.column}
-        </Text>
-        {c.title !== '' && (
-          <Text dimColor wrap="truncate-end">
-            {' '}
-            {c.title}
-          </Text>
-        )}
-        {minutes !== null && minutes > 0 && <Text dimColor> · {minutes} мин назад</Text>}
-        <Text> </Text>
-        <Button key="refresh" label="Обновить" onPress={() => void refresh($)} />
-        <Button key="hide" label="Скрыть" onPress={() => update($, isHidden, () => true)} />
-      </Box>
-    )
-  })
-
-  on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
-    const c = await read($, card)
-    if (!c || (await read($, isHidden))) return next(e)
-
-    const { Box, Text } = $.ui.resolve(e)
     const isLit = await read($, pulse)
 
     return (
-      <Box flexDirection="row">
-        {steps(c).map((step, i) => {
-          const key = `step-${i}`
-          if (step === 'done') return <Text key={key} backgroundColor="success">{CELL}</Text>
-          if (step === 'blocked') return <Text key={key} backgroundColor="error">{CELL}</Text>
-          if (step === 'current') {
-            return <Text key={key} backgroundColor={isLit ? 'claude' : 'warning'}>{CELL}</Text>
-          }
-          return <Text key={key} color="inactive">[   ]</Text>
-        }).flatMap((cell, i) => (i === 0 ? [cell] : [<Text key={`gap-${i}`}> </Text>, cell]))}
-        {e.props.hint !== '' && <Text dimColor>  {e.props.hint}</Text>}
+      <Box flexDirection="column">
+        <Box>
+          <Text dimColor>slonk </Text>
+          <Text bold>{c.key}</Text>
+          <Text> · </Text>
+          <Text bold color={GROUP_COLOR[c.group] ?? 'white'}>
+            {c.column}
+          </Text>
+          {c.title !== '' && (
+            <Text dimColor wrap="truncate-end">
+              {' '}
+              {c.title}
+            </Text>
+          )}
+          {minutes !== null && minutes > 0 && <Text dimColor> · {minutes} мин назад</Text>}
+          <Text> </Text>
+          <Button key="refresh" label="Обновить" onPress={() => void refresh($)} />
+          <Button key="hide" label="Скрыть" onPress={() => update($, isHidden, () => true)} />
+        </Box>
+        <Box flexDirection="row">
+          {steps(c).map((step, i) => {
+            const key = `step-${i}`
+            if (step === 'done') return <Text key={key} backgroundColor="success">{CELL}</Text>
+            if (step === 'blocked') return <Text key={key} backgroundColor="error">{CELL}</Text>
+            if (step === 'current') {
+              return <Text key={key} backgroundColor={isLit ? 'claude' : 'warning'}>{CELL}</Text>
+            }
+            return <Text key={key} color="inactive">[   ]</Text>
+          }).flatMap((cell, i) => (i === 0 ? [cell] : [<Text key={`gap-${i}`}> </Text>, cell]))}
+        </Box>
       </Box>
     )
   })

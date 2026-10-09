@@ -22,15 +22,9 @@ const BAND = {
   },
 } as const
 
-const HINT = {
-  plugin: 'slonk-card',
-  component: 'PromptHint',
-  props: { isDraft: false, isWorking: false, hint: '? for shortcuts' },
-} as const
-
 /** The stepper's cells as drawn: what fills each one, by its key. */
 const stepper = async ($: Engine, surface: 'terminal' | 'desktop') => {
-  const ui = await $.ui.mount({ ...HINT, surface })
+  const ui = await $.ui.mount({ ...BAND, surface })
   const texts = await ui.findAll({ type: 'Text' })
   await ui.unmount()
   return texts
@@ -178,7 +172,7 @@ describe('slonk-card', () => {
     expect(await bandText($, 'terminal')).toContain('Testing')
   })
 
-  test('draws the flow as a stepper under the prompt', async ($, on) => {
+  test('draws the flow as a stepper in the band', async ($, on) => {
     world(on)
     on('tool.call', { tool: 'mcp__slonk-developer__transition_issue' }, () => ({
       result: {},
