@@ -22,6 +22,22 @@ const BAND = {
   },
 } as const
 
+const HINT = {
+  plugin: 'slonk-card',
+  component: 'PromptHint',
+  props: { isDraft: false, isWorking: false, hint: '? for shortcuts' },
+} as const
+
+/** The stepper's cells as drawn: what fills each one, by its key. */
+const stepper = async ($: Engine, surface: 'terminal' | 'desktop') => {
+  const ui = await $.ui.mount({ ...HINT, surface })
+  const texts = await ui.findAll({ type: 'Text' })
+  await ui.unmount()
+  return texts
+    .filter(t => t.text === '     ' || t.text === '[   ]')
+    .map(t => String(t.props.backgroundColor ?? t.props.color))
+}
+
 const bandText = async ($: Engine, surface: 'terminal' | 'desktop') => {
   const ui = await $.ui.mount({ ...BAND, surface })
   const texts = await ui.findAll({ type: 'Text' })
@@ -160,5 +176,66 @@ describe('slonk-card', () => {
 
     expect(calls).toBe(1)
     expect(await bandText($, 'terminal')).toContain('Testing')
+  })
+
+  test('draws the flow as a stepper under the prompt', async ($, on) => {
+    world(on)
+    on('tool.call', { tool: 'mcp__slonk-developer__transition_issue' }, () => ({
+      result: {},
+      text: issue('Code Review', 'started'),
+    }))
+    await $.tool.call({ tool: 'mcp__slonk-developer__transition_issue', issue_id: 'SLONK-37', state: 'Code Review' })
+
+    for (const surface of ['terminal', 'desktop'] as const) {
+      const cells = await stepper($, surface)
+      expect(cells.slice(0, 4)).toEqual(['success', 'success', 'success', 'success'])
+      expect(['warning', 'claude']).toContain(cells[4])
+      expect(cells.slice(5)).toEqual(['inactive', 'inactive', 'inactive', 'inactive'])
+    }
+  })
+
+  test('the current step flickers', async ($, on) => {
+    const clock = world(on)
+    on('tool.call', { tool: 'mcp__slonk-developer__transition_issue' }, () => ({
+      result: {},
+      text: issue('Testing', 'started'),
+    }))
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await $.tool.call({ tool: 'mcp__slonk-developer__transition_issue', issue_id: 'SLONK-37', state: 'Testing' })
+
+    const before = (await stepper($, 'terminal'))[5]
+    await clock.advance(700)
+    const after = (await stepper($, 'terminal'))[5]
+
+    expect(before).not.toBe(after)
+  })
+
+  test('a blocked card keeps its place and turns the step red', async ($, on) => {
+    world(on)
+    let column = 'Development'
+    let group = 'started'
+    on('tool.call', { tool: 'mcp__slonk-developer__transition_issue' }, () => ({
+      result: {},
+      text: issue(column, group),
+    }))
+    await $.tool.call({ tool: 'mcp__slonk-developer__transition_issue', issue_id: 'SLONK-37', state: column })
+    column = 'Blocked'
+    group = 'unstarted'
+    await $.tool.call({ tool: 'mcp__slonk-developer__transition_issue', issue_id: 'SLONK-37', state: column })
+
+    const cells = await stepper($, 'terminal')
+    expect(cells.slice(0, 2)).toEqual(['success', 'success'])
+    expect(cells[2]).toBe('error')
+  })
+
+  test('a done card fills every step', async ($, on) => {
+    world(on)
+    on('tool.call', { tool: 'mcp__slonk-merger__transition_issue' }, () => ({
+      result: {},
+      text: issue('Done', 'completed'),
+    }))
+    await $.tool.call({ tool: 'mcp__slonk-merger__transition_issue', issue_id: 'SLONK-37', state: 'Done' })
+
+    expect(new Set(await stepper($, 'desktop'))).toEqual(new Set(['success']))
   })
 })

@@ -6,8 +6,23 @@ import type { Card } from '../types'
 const card = atom({ plugin: 'slonk-card', key: 'card' } as const, null)
 const lastServer = atom({ plugin: 'slonk-card', key: 'lastServer' } as const, null)
 const isHidden = atom({ plugin: 'slonk-card', key: 'isHidden' } as const, false)
+const pulse = atom({ plugin: 'slonk-card', key: 'pulse' } as const, false)
 
 const POLL_MS = 60_000
+const PULSE_MS = 700
+// slonk's main flow, left to right: one stepper cell per column.
+export const FLOW = [
+  'To Do',
+  'Analysis',
+  'Development',
+  'Security Review',
+  'Code Review',
+  'Testing',
+  'Documenting',
+  'Merging',
+  'Done',
+] as const
+const CELL = '     '
 // Any MCP tool, mcp__<server>__<tool>: slonk may be connected as slonk-developer,
 // slonk-qa, ... or as a connector named by a UUID, so a server is told by its answers.
 const MCP_TOOL = /^mcp__(.+)__([a-z_]+)$/i
@@ -67,6 +82,7 @@ export const issuesIn = (text: string | undefined): Issue[] => {
 const describe = (c: Card) => `${c.key} · ${c.column}${c.title ? ` — ${c.title}` : ''}`
 
 let poll: { cancel: () => void } | null = null
+let flicker: { cancel: () => void } | null = null
 // False once the host refused a call the mod made on its own (e.g. under the auto
 // permission mode, whose classifier only judges actions the model asked for).
 let canPoll = true
@@ -77,7 +93,9 @@ const store = async ($: EngineInterface, issue: Issue, server: string) => {
   if (before && before.key === issue.key && before.column !== issue.column) {
     $.ui.toast(`${issue.key}: ${before.column} → ${issue.column}`)
   }
-  await update($, card, () => ({ ...issue, server, checkedAt: now }))
+  const at = FLOW.indexOf(issue.column as (typeof FLOW)[number])
+  const flowIndex = at >= 0 ? at : before?.key === issue.key ? before.flowIndex : undefined
+  await update($, card, () => ({ ...issue, server, checkedAt: now, flowIndex }))
   $.ui.status(`slonk ${issue.key} · ${issue.column}`)
 }
 
@@ -109,6 +127,25 @@ const refresh = async ($: EngineInterface, key?: string): Promise<string> => {
   }
 }
 
+/** A card still travelling the flow: its current step flickers. */
+const isMoving = (c: Card) => c.column !== 'Done' && FLOW.includes(c.column as (typeof FLOW)[number])
+
+type StepState = 'done' | 'current' | 'blocked' | 'todo'
+
+/** What each FLOW cell shows for a card. */
+export const steps = (c: Pick<Card, 'column' | 'group' | 'flowIndex'>): StepState[] => {
+  const at = FLOW.indexOf(c.column as (typeof FLOW)[number])
+  const current = at >= 0 ? at : (c.flowIndex ?? -1)
+  const isDone = c.column === 'Done' || c.group === 'completed'
+  const isStuck = at < 0 && c.group !== 'completed'
+
+  return FLOW.map((_, i) => {
+    if (isDone || i < current) return 'done'
+    if (i === current) return isStuck ? 'blocked' : 'current'
+    return 'todo'
+  })
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
@@ -116,6 +153,10 @@ export const register: Register = on => {
       description: 'Текущая карточка slonk: /slonk-card [KEY | off | hide | show]',
     })
     poll?.cancel()
+    flicker?.cancel()
+    flicker = $.clock.every(PULSE_MS, () => {
+      void read($, card).then(c => (c && isMoving(c) ? update($, pulse, p => !p) : undefined))
+    })
     poll = $.clock.every(POLL_MS, () => {
       if (canPoll) void read($, card).then(c => (c ? refresh($) : undefined))
     })
@@ -126,6 +167,8 @@ export const register: Register = on => {
   on('session.end', async ($, e, next) => {
     poll?.cancel()
     poll = null
+    flicker?.cancel()
+    flicker = null
 
     return next(e)
   })
@@ -206,6 +249,29 @@ export const register: Register = on => {
         <Text> </Text>
         <Button key="refresh" label="Обновить" onPress={() => void refresh($)} />
         <Button key="hide" label="Скрыть" onPress={() => update($, isHidden, () => true)} />
+      </Box>
+    )
+  })
+
+  on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
+    const c = await read($, card)
+    if (!c || (await read($, isHidden))) return next(e)
+
+    const { Box, Text } = $.ui.resolve(e)
+    const isLit = await read($, pulse)
+
+    return (
+      <Box flexDirection="row">
+        {steps(c).map((step, i) => {
+          const key = `step-${i}`
+          if (step === 'done') return <Text key={key} backgroundColor="success">{CELL}</Text>
+          if (step === 'blocked') return <Text key={key} backgroundColor="error">{CELL}</Text>
+          if (step === 'current') {
+            return <Text key={key} backgroundColor={isLit ? 'claude' : 'warning'}>{CELL}</Text>
+          }
+          return <Text key={key} color="inactive">[   ]</Text>
+        }).flatMap((cell, i) => (i === 0 ? [cell] : [<Text key={`gap-${i}`}> </Text>, cell]))}
+        {e.props.hint !== '' && <Text dimColor>  {e.props.hint}</Text>}
       </Box>
     )
   })

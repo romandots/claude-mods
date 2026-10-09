@@ -1,6 +1,6 @@
 {
   "name": "slonk-card",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "Shows the slonk card this session works on and the column it is in right now",
   "types": "./types/index.d.ts"
 }
